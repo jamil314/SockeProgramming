@@ -73,12 +73,6 @@ public class ClientHandler implements Runnable {
         }
         dltMsg+="Deleting directory: "+dir+"......\n";
         System.out.println(dltMsg);
-        try {
-            out.writeUTF(dltMsg);
-            out.flush();
-        } catch (IOException e1) {
-            e1.printStackTrace();
-        }
         if(path.toFile().exists()){
             try {
                 Files.deleteIfExists(path);
@@ -118,7 +112,7 @@ public class ClientHandler implements Runnable {
         String[] tokens = s.split(" ");
         switch (tokens[0]){
             case "/whisper":
-                String msg="(Whispering): ";
+                String msg=clientUserName+" (Whispering): ";
                 for(int i=2; i<tokens.length; i++) {
                     msg += tokens[i] + " ";
                 }
@@ -150,33 +144,43 @@ public class ClientHandler implements Runnable {
     
 
     private void send(String receiver, String fileName) {
-        if(receiver.equals("/all")){
-            for(ClientHandler clientHandler : clientHandlers){
-                if(!clientHandler.clientUserName.equals(this.clientUserName)){
-                    sendPrivate(clientHandler.clientUserName, fileName);
+        int fileLength;
+        try {
+            fileLength = in.readInt();
+            byte[] buffer = new byte[fileLength];
+            in.readFully(buffer, 0, fileLength);
+            if(receiver.equals("/all")){
+                for(ClientHandler clientHandler : clientHandlers){
+                    if(!clientHandler.clientUserName.equals(this.clientUserName)){
+                        sendPrivate(clientHandler.clientUserName, fileName, buffer);
+                    }
                 }
+            } else {
+                sendPrivate(receiver, fileName, buffer);
             }
-        } else {
-            sendPrivate(receiver, fileName);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
     
 
-    private void sendPrivate(String receiver, String fileName) {
+    private void sendPrivate(String receiver, String fileName, byte[] buffer) {
+        System.out.println("sending <" + fileName + "> to <" + receiver+">  from <"+this.clientUserName+">");
         File file = new File("files/" + receiver + "/" + fileName);
+        String extention = fileName.substring(fileName.lastIndexOf("."));
+        fileName = fileName.substring(0, fileName.lastIndexOf("."));
         int multi=0;
         while(file.exists()){
             multi++;
-            file = new File("files/" + receiver + "/" + fileName + "(" + multi + ")");
+            file = new File("files/" + receiver + "/" + fileName + "(" + multi + ")"+extention);
         }
-        if(multi>0) fileName = fileName+"("+multi+")";
+        if(multi>0) fileName = fileName+"("+multi+")"+extention;
+        else fileName = fileName+extention;
         try {
-            int fileLength = in.readInt();
-            byte[] buffer = new byte[fileLength];
-            in.readFully(buffer, 0, fileLength);
             FileOutputStream fos = new FileOutputStream("files/" + receiver + "/" + fileName);
             fos.write(buffer);
             fos.close();
+            sendPrivateMessage(receiver, "[SERVER]: "+clientUserName+" sent you a file: "+fileName);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -188,7 +192,7 @@ public class ClientHandler implements Runnable {
 
     private void invalidCommand() {
         try {
-            out.writeUTF("[SERVER]: Invalid command !!!  Type /help or /onichan_taskete to see all the valid commands" + "\n");
+            out.writeUTF("[SERVER]: Invalid command !!!  Type /help to see all the valid commands" + "\n");
             out.flush();
         } catch (IOException e) {
             System.out.println("Error in invalid command");
@@ -215,7 +219,7 @@ public class ClientHandler implements Runnable {
         for(ClientHandler clientHandler : clientHandlers){
             if(clientHandler.clientUserName.equals(receiver)){
                 try {
-                    clientHandler.out.writeUTF(clientUserName + message + "\n");
+                    clientHandler.out.writeUTF(message + "\n");
                     clientHandler.out.flush();
                 } catch (IOException e) {
                     closeEverything(socket, in, out);
