@@ -16,6 +16,8 @@ public class ClientHandler implements Runnable {
     private DataInputStream in;
     private DataOutputStream out;
     private String clientUserName;
+    private String incomingFolder;
+    private FileOutputStream fos;
 
     ClientHandler(Socket socket) {
         this.socket = socket;
@@ -23,10 +25,11 @@ public class ClientHandler implements Runnable {
             in = new DataInputStream(socket.getInputStream());
             out = new DataOutputStream(socket.getOutputStream());
             clientUserName = in.readUTF();
+            this.incomingFolder ="files/"+clientUserName;
             clientHandlers.add(this);
             broadcastMessage("[SERVER]: New user " + clientUserName + " joined the chat room");
         } catch (Exception e){
-            System.out.println("Error in client handler constructor");
+            e.printStackTrace();
         }
     }
 
@@ -134,6 +137,9 @@ public class ClientHandler implements Runnable {
             case "/send":
                 send(tokens[1], tokens[2]);
                 break;
+            case "/change_incoming_folder":
+                changeIncomingFolder(tokens[1]);
+                break;
             default:
                 invalidCommand();
                 break;
@@ -141,53 +147,64 @@ public class ClientHandler implements Runnable {
     }
 
 
-    
-
-    private void send(String receiver, String fileName) {
-        int fileLength;
+    private void send(String receiver, String fileName){
         try {
-            fileLength = in.readInt();
-            byte[] buffer = new byte[fileLength];
-            in.readFully(buffer, 0, fileLength);
-            if(receiver.equals("/all")){
+            for(ClientHandler clientHandler : clientHandlers){
+                if(!clientHandler.clientUserName.equals(clientUserName) &&
+                    (receiver.equals("/all") || receiver.equals(clientHandler.clientUserName))){ 
+                    System.out.println("sending <" + fileName + "> to <" + receiver+">  from <"+this.clientUserName+">");
+                    String targetFolder = clientHandler.incomingFolder;
+                    File file = new File(targetFolder +"/" + fileName);
+                    String extention = fileName.substring(fileName.lastIndexOf("."));
+                    fileName = fileName.substring(0, fileName.lastIndexOf("."));
+                    int multi=0;
+                    while(file.exists()){
+                        multi++;
+                        file = new File(targetFolder + "/" + fileName + "(" + multi + ")"+extention);
+                    }
+                    if(multi>0) fileName = fileName+"("+multi+")"+extention;
+                    else fileName = fileName+extention;
+                    clientHandler.fos = new FileOutputStream(targetFolder + "/" + fileName);
+                }
+            }
+            try {
+                long fileLength = in.readLong();
+                long total = 0;
+                while(fileLength>0){
+                    int chunkSize = in.readInt();
+                    total+=chunkSize;
+                    System.out.println(chunkSize+" bytes of data transfered, in total: "+total);
+                    byte[] buffer = new byte[chunkSize];
+                    in.read(buffer, 0, chunkSize);
+
+                    for(ClientHandler clientHandler : clientHandlers){
+                        if(!clientHandler.clientUserName.equals(clientUserName) &&
+                        (receiver.equals("/all") || receiver.equals(clientHandler.clientUserName))){
+                            clientHandler.fos.write(buffer, 0, chunkSize);
+                        }
+                    }
+                    fileLength -= chunkSize;
+                }
                 for(ClientHandler clientHandler : clientHandlers){
-                    if(!clientHandler.clientUserName.equals(this.clientUserName)){
-                        sendPrivate(clientHandler.clientUserName, fileName, buffer);
+                    if(!clientHandler.clientUserName.equals(clientUserName) &&
+                    (receiver.equals("/all") || receiver.equals(clientHandler.clientUserName))){
+                        clientHandler.fos.flush();
+                        clientHandler.fos.close();
+                        sendPrivateMessage(clientHandler.clientUserName, "[SERVER]: "+clientUserName+" sent you a file: "+fileName);
+
                     }
                 }
-            } else {
-                sendPrivate(receiver, fileName, buffer);
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-        } catch (IOException e) {
+
+
+
+
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
-    
-
-    private void sendPrivate(String receiver, String fileName, byte[] buffer) {
-        System.out.println("sending <" + fileName + "> to <" + receiver+">  from <"+this.clientUserName+">");
-        File file = new File("files/" + receiver + "/" + fileName);
-        String extention = fileName.substring(fileName.lastIndexOf("."));
-        fileName = fileName.substring(0, fileName.lastIndexOf("."));
-        int multi=0;
-        while(file.exists()){
-            multi++;
-            file = new File("files/" + receiver + "/" + fileName + "(" + multi + ")"+extention);
-        }
-        if(multi>0) fileName = fileName+"("+multi+")"+extention;
-        else fileName = fileName+extention;
-        try {
-            FileOutputStream fos = new FileOutputStream("files/" + receiver + "/" + fileName);
-            fos.write(buffer);
-            fos.close();
-            sendPrivateMessage(receiver, "[SERVER]: "+clientUserName+" sent you a file: "+fileName);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-
-   
 
 
     private void invalidCommand() {
@@ -195,22 +212,26 @@ public class ClientHandler implements Runnable {
             out.writeUTF("[SERVER]: Invalid command !!!  Type /help to see all the valid commands" + "\n");
             out.flush();
         } catch (IOException e) {
-            System.out.println("Error in invalid command");
+            e.printStackTrace();
         }
     }
 
     
 
     private void listFiles() {
-        File file = new File("files/"+clientUserName); 
+        
+        File file = new File(incomingFolder); 
         String[] files = file.list();
+        String reply = "Incoming Folder: "+ incomingFolder + "\n";
         for(String fileName : files){
-            try {
-                out.writeUTF(fileName + "\n");
-                out.flush();
-            } catch (IOException e) {
-                System.out.println("Error in listFiles");
-            }
+            reply+= fileName + "\n";
+        }
+
+        try {
+            out.writeUTF(reply + "____________\n");
+            out.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -228,7 +249,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    void listUsers() throws IOException{
+    private void listUsers() throws IOException{
         String users = "";
         for(ClientHandler clientHandler : clientHandlers){
             users += clientHandler.clientUserName + "\n";
@@ -238,18 +259,27 @@ public class ClientHandler implements Runnable {
         out.flush();
     }
 
+    private void changeIncomingFolder(String newIncomingFolder){
+        this.incomingFolder = newIncomingFolder;
+        File file = new File(newIncomingFolder);
+            if(!file.exists())
+                file.mkdirs();
+    }
+
+
     private void help() {
         try {
             out.writeUTF("/list_users - list of users in the chat room\n" +
                     "/whisper <username> <message> - send private message\n" +
                     "/help - list of commands\n" +
                     "/list_files - list of files in your folder\n" +
+                    "/change_incoming_folder <filePath> - change your download location to [filePath]"+
                     "/send /all <file_name> - send file to everyone\n" +
-                    "/send <username> <file_name> - send file to user named _username_\n"+
+                    "/send <username> <file_name> - send file to user named [username]\n"+
                     "/biday_prithibi - exit the chat room\n");
             out.flush();
         } catch (IOException e) {
-            System.out.println("Error in help");
+            e.printStackTrace();
         }
     }
 }
