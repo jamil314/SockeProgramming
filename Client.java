@@ -38,23 +38,10 @@ public class Client {
                         case "/send":
                             if(tokens.length<3){
                                 System.out.println("Invalid command!!!\n"+
-                                "Usage: /send <username> <path>\n"+
-                                "Example: /send jamil C:\\Users\\user\\test.txt\n"+
-                                "or: /send /all C:\\Users\\user\\test.txt");
+                                "Try: /send <user> <path>\n");
                                 break;
                             }
-                            File file = new File(tokens[2]);
-                            if(!file.exists()){
-                                System.out.println("File not found");
-                                break;
-                            }
-                            System.out.println("Sending file: "+file.getName());
-                            FileInputStream fileInputStream = new FileInputStream(file);
-                            byte[] buffer = new byte[(int)file.length()];
-                            fileInputStream.read(buffer);
-                            out.writeUTF("/send " + tokens[1] + " " +file.getName());
-                            out.writeInt(buffer.length);
-                            out.write(buffer);
+                            send(tokens[1], tokens[2]);
                             break;
                         default:
                             out.writeUTF(msg);
@@ -68,6 +55,53 @@ public class Client {
         }
     }
 
+    void send(String receiver, String filePath){
+        try{
+            File file = new File(filePath);
+            if(!file.exists()){
+                System.out.println("File not found");
+                return;
+            }
+            out.writeUTF("/send " + receiver + " " + file.getName());
+            System.out.println("Sending file: "+file.getName());
+            long start = System.currentTimeMillis();
+            System.out.println("Starting time: "+start);
+            FileInputStream fin = new FileInputStream(file);
+            long toSend = (long)file.length();
+            System.out.println("File size: "+toSend+" bytes\n__________");
+            out.writeLong(toSend);
+            long total = 0;
+            int done[]={0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            while(toSend>0){
+                int chunkSize = 1024;
+                if(toSend<1024) chunkSize = (int)toSend;
+                byte[] buffer = new byte[chunkSize];
+                int read = fin.read(buffer, 0, chunkSize);
+                if(read>0){
+                    total+=read;
+                    long progress = (total*10)/(total+toSend);
+                    if(done[(int)progress]==0){
+                        System.out.append("#");
+                        done[(int)progress]=1;
+                    }
+                    out.writeInt(read);
+                    out.write(buffer, 0, read);
+                    toSend-=read;
+                } else if(read<0){
+                    throw new IOException("Exception when reading file...");
+                }
+            }
+            long end = System.currentTimeMillis();
+            System.out.println("\nFinishing time: "+end);
+            System.out.println(total+" bytes of data sent in "+(end - start)+" milliseconds @ "+(total)/(end - start)+" bytes per milliseconds");
+        } catch (IOException e){
+            closeEverything(socket, in, out);
+        }
+
+    }
+
+
+
     public void listenForMessage(){
         new Thread(new Runnable() {
             @Override
@@ -78,6 +112,7 @@ public class Client {
                         message = in.readUTF();
                         System.out.println(message);
                     }
+                    closeEverything(socket, in, out);
                 } catch (IOException e) {
                     closeEverything(socket, in, out);
                 }
@@ -86,7 +121,7 @@ public class Client {
     }
     
     public void closeEverything(Socket socket, DataInputStream in, DataOutputStream out){
-        System.out.println("[biday prithibi] " + userName + " is leaving the chat room");
+        System.out.println(userName + " is leaving the chat room");
         try{
             if(in != null){
                 in.close();
@@ -108,7 +143,7 @@ public class Client {
             while(invalid(userName)){
                 userName = scanner.nextLine();
             }
-            System.out.println("Welcome " + userName+"\nType command /help to see the commands");
+            System.out.println("Welcome " + userName+"\nType </help> to see the commands");
             try {
                 Socket socket = new Socket("localhost", 8080);
                 Client client = new Client(socket, userName);
@@ -133,15 +168,13 @@ public class Client {
         try {
             File file = new File("files/"+name);
             if(file.exists()){
-                System.out.println("Username already exists: ");
+                System.out.println("Username already exists");
                 return true;
             }
             file.mkdirs();
         } catch (Exception e) {
             e.printStackTrace();
         }
-
-
 
         return false;
     }
