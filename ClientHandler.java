@@ -8,10 +8,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.concurrent.Flow.Subscriber;
+import java.util.concurrent.Flow.Subscription;
 
 
-public class ClientHandler implements Runnable {
+
+public class ClientHandler implements Runnable, Subscriber {
     public static ArrayList<ClientHandler> clientHandlers = new ArrayList<ClientHandler>();
+    public static Notifier notifier = new Notifier();
     private Socket socket;
     private DataInputStream in;
     private DataOutputStream out;
@@ -27,6 +31,8 @@ public class ClientHandler implements Runnable {
             clientUserName = in.readUTF();
             this.incomingFolder ="files/"+clientUserName;
             clientHandlers.add(this);
+            notifier.subscribe(this);
+            // notifier.broadCast("[SERVER]: New user " + clientUserName + " joined the chat room");
             broadcastMessage("[SERVER]: New user " + clientUserName + " joined the chat room");
         } catch (Exception e){
             e.printStackTrace();
@@ -54,18 +60,26 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    // public void broadcastMessage(String message){
+    //     for(ClientHandler clientHandler : clientHandlers){
+    //         try {
+    //             if(!clientHandler.equals(this)){
+    //                 clientHandler.out.writeUTF(message + "\n");
+    //                 clientHandler.out.flush();
+    //             }
+    //         }  catch (IOException e){
+    //             closeEverything(socket, in, out);
+    //         }
+    //     }
+    // }
+
     public void broadcastMessage(String message){
-        for(ClientHandler clientHandler : clientHandlers){
-            try {
-                if(!clientHandler.equals(this)){
-                    clientHandler.out.writeUTF(message + "\n");
-                    clientHandler.out.flush();
-                }
-            }  catch (IOException e){
-                closeEverything(socket, in, out);
-            }
-        }
+        notifier.unSubscribe(this);
+        notifier.broadCast(message);
+        notifier.subscribe(this);
     }
+
+
 
     public boolean removeClientHandler(){
         Path path = Paths.get("files/" + clientUserName);
@@ -85,6 +99,7 @@ public class ClientHandler implements Runnable {
             System.out.println("User " + clientUserName + " is leaving the chat room");
             broadcastMessage("[SERVER]: " + clientUserName + " left the chat room !!!");
             clientHandlers.remove(this);
+            notifier.unSubscribe(this);
             return true;
         }
         System.out.println("User " + clientUserName + " has already left the chat room");
@@ -281,5 +296,37 @@ public class ClientHandler implements Runnable {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+
+    @Override
+    public void onSubscribe(Subscription subscription) {
+        // TODO Auto-generated method stub
+        
+    }
+
+
+    @Override
+    public void onNext(Object item) {
+        try {
+            out.writeUTF(item.toString());
+            out.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        
+    }
+
+
+    @Override
+    public void onError(Throwable throwable) {
+        throwable.printStackTrace();        
+    }
+
+
+    @Override
+    public void onComplete() {
+        // TODO Auto-generated method stub
+        
     }
 }
