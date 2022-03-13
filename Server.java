@@ -1,12 +1,34 @@
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.concurrent.Flow.Publisher;
+import java.util.concurrent.Flow.Subscriber;
 
-public class Server {
+public class Server implements Publisher {
+
+
+    ArrayList<Subscriber> subscribers = new ArrayList<Subscriber>();
+    @Override
+    public void subscribe(Subscriber subscriber) {
+        subscribers.add(subscriber);
+    }
+    public void unSubscribe(Subscriber subscriber){
+        subscribers.remove(subscriber);
+    }
+    public void broadCast(String string) {
+        for (Subscriber subscriber : subscribers) {
+            subscriber.onNext(string);
+        }
+    }
+
+
+
     private ServerSocket serverSocket;
     public Server(ServerSocket serverSocket){
         this.serverSocket = serverSocket;
     }
     public void startServer(){
+        ClientHandler.server = this;
         try{
             while(!serverSocket.isClosed()){
                 Socket socket = serverSocket.accept();
