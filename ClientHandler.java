@@ -15,7 +15,8 @@ import java.util.concurrent.Flow.Subscription;
 
 public class ClientHandler implements Runnable, Subscriber {
     public static ArrayList<ClientHandler> clientHandlers = new ArrayList<ClientHandler>();
-    public static Notifier notifier = new Notifier();
+    // public static Notifier notifier = new Notifier();
+    public static Server server;
     private Socket socket;
     private DataInputStream in;
     private DataOutputStream out;
@@ -31,7 +32,7 @@ public class ClientHandler implements Runnable, Subscriber {
             clientUserName = in.readUTF();
             this.incomingFolder ="files/"+clientUserName;
             clientHandlers.add(this);
-            notifier.subscribe(this);
+            server.subscribe(this);
             // notifier.broadCast("[SERVER]: New user " + clientUserName + " joined the chat room");
             broadcastMessage("[SERVER]: New user " + clientUserName + " joined the chat room");
         } catch (Exception e){
@@ -74,9 +75,9 @@ public class ClientHandler implements Runnable, Subscriber {
     // }
 
     public void broadcastMessage(String message){
-        notifier.unSubscribe(this);
-        notifier.broadCast(message);
-        notifier.subscribe(this);
+        server.unSubscribe(this);
+        server.broadCast(message);
+        server.subscribe(this);
     }
 
 
@@ -99,7 +100,7 @@ public class ClientHandler implements Runnable, Subscriber {
             System.out.println("User " + clientUserName + " is leaving the chat room");
             broadcastMessage("[SERVER]: " + clientUserName + " left the chat room !!!");
             clientHandlers.remove(this);
-            notifier.unSubscribe(this);
+            server.unSubscribe(this);
             return true;
         }
         System.out.println("User " + clientUserName + " has already left the chat room");
