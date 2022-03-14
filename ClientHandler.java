@@ -13,7 +13,7 @@ import java.util.concurrent.Flow.Subscription;
 
 
 
-public class ClientHandler implements Runnable, Subscriber {
+public class ClientHandler implements Runnable, Subscriber<String> {
     public static ArrayList<ClientHandler> clientHandlers = new ArrayList<ClientHandler>();
     // public static Notifier notifier = new Notifier();
     public static Server server;
@@ -308,9 +308,9 @@ public class ClientHandler implements Runnable, Subscriber {
 
 
     @Override
-    public void onNext(Object item) {
+    public void onNext(String msg) {
         try {
-            out.writeUTF(item.toString());
+            out.writeUTF(msg);
             out.flush();
         } catch (IOException e) {
             e.printStackTrace();
