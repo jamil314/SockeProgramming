@@ -4,19 +4,20 @@ import java.util.ArrayList;
 import java.util.concurrent.Flow.Publisher;
 import java.util.concurrent.Flow.Subscriber;
 
-public class Server implements Publisher {
+public class Server implements Publisher<String> {
 
 
-    ArrayList<Subscriber> subscribers = new ArrayList<Subscriber>();
+    ArrayList<Subscriber<String>> subscribers = new ArrayList<Subscriber<String>>();
     @Override
-    public void subscribe(Subscriber subscriber) {
-        subscribers.add(subscriber);
+    public void subscribe(Subscriber<? super String> subscriber) {
+        subscribers.add((Subscriber<String>) subscriber);
+        
     }
-    public void unSubscribe(Subscriber subscriber){
+    public void unSubscribe(Subscriber<String> subscriber){
         subscribers.remove(subscriber);
     }
     public void broadCast(String string) {
-        for (Subscriber subscriber : subscribers) {
+        for (Subscriber<String> subscriber : subscribers) {
             subscriber.onNext(string);
         }
     }
